@@ -21,3 +21,11 @@ venv/
 *.log
 web_custom_versions/
 .DS_Store
+
+# -----------------------[ junhyuk custom ignores ]-----------------------
+CityScapes/
+logs/
+models/
+output/
+input/
+custom_nodes/
