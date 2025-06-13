@@ -5,37 +5,34 @@ import yaml
 
 
 # ─────────────────────────────────────────────
-def create_yaml(version_tag: str, delete_ratio: float, match_ratio: float, *, save_path: str):
+def create_yaml(
+    version_tag: str,
+    delete_ratio: float,
+    match_ratio: float,
+    *,
+    save_path: str,
+    base_dir: str,          # ← 호출 측에서 넘겨주는 절대 경로
+):
     """
-    datasets/ODSR-IHS_{version_tag} 경로를 가리키는 YOLO 데이터 YAML 파일 작성
-    version_tag 예: v9-v10_r50_m150
+    YOLO 데이터셋 YAML 파일 작성
+    - dataset 경로: <base_dir>/ODSR-IHS_{version_tag}
+    - 예: /home/jhcha2/jh_ws/yolo/datasets/ODSR-IHS_v9-v10_r60_m25
     """
+    dataset_root = os.path.join(base_dir, f"ODSR-IHS_{version_tag}")
     fname = f"{version_tag}.yaml"
     path = os.path.join(save_path, fname)
-    dataset = f"ODSR-IHS_{version_tag}"
 
     data = {
-        "train": f"{dataset}/train",
-        "val": f"{dataset}/valid",
-        "test": f"{dataset}/test",
+        # 절대 경로 ↓↓↓
+        "train": os.path.join(dataset_root, "train"),
+        "val":   os.path.join(dataset_root, "valid"),
+        "test":  os.path.join(dataset_root, "test"),
         "nc": 14,
         "names": [
-            "slippers",
-            "stool",
-            "wire",
-            "carpet",
-            "sofa",
-            "socks",
-            "feces",
-            "table",
-            "bed",
-            "closetool",
-            "book",
-            "cabinet",
-            "trashcan",
-            "curtain",
+            "slippers", "stool", "wire", "carpet", "sofa", "socks", "feces",
+            "table", "bed", "closetool", "book", "cabinet", "trashcan", "curtain",
         ],
-        "roboflow": {
+        "roboflow": {           # 유지(필요 없으면 삭제해도 무방)
             "workspace": "agv",
             "project": "odsr-ihs",
             "version": 1,
@@ -44,19 +41,19 @@ def create_yaml(version_tag: str, delete_ratio: float, match_ratio: float, *, sa
         },
     }
 
+    # YAML 저장
     with open(path, "w") as f:
         yaml.dump(data, f, sort_keys=False, default_flow_style=False)
 
-    # names 한 줄로 고정 출력
+    # names 한 줄로 강제
     with open(path, "r") as f:
         lines = f.readlines()
     with open(path, "w") as f:
         for line in lines:
             if line.startswith("names:"):
-                f.write(
-                    "names: ['slippers', 'stool', 'wire', 'carpet', 'sofa', 'socks', "
-                    "'feces', 'table', 'bed', 'closetool', 'book', 'cabinet', 'trashcan', 'curtain']\n"
-                )
+                f.write("names: ['slippers', 'stool', 'wire', 'carpet', 'sofa', "
+                        "'socks', 'feces', 'table', 'bed', 'closetool', 'book', "
+                        "'cabinet', 'trashcan', 'curtain']\n")
             elif line.strip().startswith("- "):
                 continue
             else:
