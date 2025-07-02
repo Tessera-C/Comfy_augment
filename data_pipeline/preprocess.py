@@ -9,7 +9,9 @@ import os
 import random
 import shutil
 from typing import List
+from pathlib import Path
 
+VALID_EXT = {".jpg", ".jpeg", ".png"}
 
 # ─────────────────────────────────────────────
 def add_prefix_to_filenames(version: str, source_folder: str, destination_folder: str):
@@ -60,86 +62,6 @@ def copy_and_prune_dataset(
 
 
 # ─────────────────────────────────────────────
-def copy_augmented_files(
-    train_dir: str,
-    versions: List[str] | str,
-    *,
-    match_ratio: float = 1.0,
-    base_output: str = "output",
-    seed: int = 42,
-):
-    """
-    train_dir (접두어 없는 원본 이미지) 기준으로 접두어 파일 복사
-    - versions : ['v9', 'v10', ...] 또는 'v9'
-    - match_ratio <1.0 또는 len(versions)==1 → 단일 버전 기존 방식
-    - match_ratio ≥1.0 & len(versions)>1   → 서로 다른 버전 섞어 복사
-    """
-    if isinstance(versions, str):
-        versions = [versions]
-
-    random.seed(seed)
-    
-    # 접두어 없는 파일 이름 리스트
-    base_names = [
-        os.path.splitext(f)[0]
-        for f in os.listdir(train_dir)
-        if f.lower().endswith((".jpg", ".jpeg", ".png"))
-        and all(not f.startswith(f"{v}_") for v in versions)
-    ]
-
-    # ────────── 1) 단일 버전 또는 match_ratio<1.0 ──────────
-    if len(versions) == 1 or match_ratio < 1.0:
-        v = versions[0]
-        img_src = os.path.join(base_output, f"ODSR_{v}")
-        lbl_src = os.path.join(base_output, f"ODSR_{v}_anno")
-        append = f"{v}_"
-
-        valid = [
-            n
-            for n in base_names
-            if any(os.path.exists(os.path.join(img_src, append + n + ext)) for ext in [".jpg", ".jpeg", ".png"])
-            and os.path.exists(os.path.join(lbl_src, append + n + ".txt"))
-        ]
-
-        k = int(len(valid) * match_ratio)
-        selected = random.sample(valid, k)
-
-        _copy_pairs(selected, v, img_src, lbl_src, train_dir, append)
-        print(f"복사 완료: {len(selected)} 쌍 ({v})")
-        return
-
-    # ────────── 2) 다중 버전 & match_ratio ≥1.0 ──────────
-    candidate = []  # (name, version)
-    for v in versions:
-        img_src = os.path.join(base_output, f"ODSR_{v}")
-        lbl_src = os.path.join(base_output, f"ODSR_{v}_anno")
-        append = f"{v}_"
-        for n in base_names:
-            img_ok = any(os.path.exists(os.path.join(img_src, append + n + ext)) for ext in [".jpg", ".jpeg", ".png"])
-            lbl_ok = os.path.exists(os.path.join(lbl_src, append + n + ".txt"))
-            if img_ok and lbl_ok:
-                candidate.append((n, v))
-
-    if not candidate:
-        print("[WARN] 일치하는 접두어 파일을 찾지 못했습니다.")
-        return
-
-    target_cnt = int(len(base_names) * match_ratio)
-    target_cnt = min(target_cnt, len(candidate))
-    picked = random.sample(candidate, target_cnt)
-
-    copied = 0
-    for n, v in picked:
-        img_src = os.path.join(base_output, f"ODSR_{v}")
-        lbl_src = os.path.join(base_output, f"ODSR_{v}_anno")
-        append = f"{v}_"
-        _copy_pairs([n], v, img_src, lbl_src, train_dir, append)
-        copied += 1
-
-    print(f"복사 완료: {copied} 쌍 (versions={','.join(versions)})")
-
-
-# ─────────────────────────────────────────────
 def _copy_pairs(names, v, img_src, lbl_src, train_dir, append):
     """이미지·라벨 쌍 복사 내부 함수"""
     for n in names:
@@ -154,3 +76,96 @@ def _copy_pairs(names, v, img_src, lbl_src, train_dir, append):
             os.path.join(lbl_src, append + n + ".txt"),
             os.path.join(train_dir, append + n + ".txt"),
         )
+
+def _copy_one(src: str, dst_dir: str):
+    """파일을 dst_dir 로 복사(동일 이름 존재 시 덮어쓰기)."""
+    shutil.copy(src, os.path.join(dst_dir, os.path.basename(src)))
+
+
+def copy_augmented_files(
+    train_dir: str,
+    versions: List[str] | str,
+    *,
+    match_ratio: float = 1.0,
+    base_output: str = "output",
+    seed: int = 42,
+):
+    """
+    train_dir 의 '원본(접두어 없는)' 이미지를 기준으로
+    - 단일 버전 또는 match_ratio<1.0 ➜ 기존 방식
+    - 다중 버전 & match_ratio≥1.0 ➜ 버전을 섞어 무작위 추출
+
+    복사 시 이미지·라벨 쌍을 함께 가져온다.
+    """
+    if isinstance(versions, str):
+        versions = [versions]
+
+    random.seed(seed)
+
+    # ── (0) 원본 파일명 목록 ─────────────────────────────
+    base_names = [
+        f.stem
+        for f in Path(train_dir).iterdir()
+        if f.suffix.lower() in VALID_EXT
+        and not any(f.name.startswith(f"{v}_") for v in versions)
+    ]
+
+    # 단일 버전 이거나 match_ratio<1.0 ------------------
+    if len(versions) == 1 or match_ratio < 1.0:
+        v = versions[0]
+        img_src_dir = Path(base_output) / f"ODSR_{v}"
+        lbl_src_dir = Path(base_output) / f"ODSR_{v}_anno"
+        pref = f"{v}_"
+
+        valid = [
+            n for n in base_names
+            if any((img_src_dir / f"{pref}{n}{ext}").exists() for ext in VALID_EXT)
+            and (lbl_src_dir / f"{pref}{n}.txt").exists()
+        ]
+        k = int(len(valid) * match_ratio)
+        chosen = random.sample(valid, k)
+
+        for n in chosen:
+            for ext in VALID_EXT:
+                fp = img_src_dir / f"{pref}{n}{ext}"
+                if fp.exists():
+                    _copy_one(fp, train_dir)
+                    break
+            _copy_one(lbl_src_dir / f"{pref}{n}.txt", train_dir)
+
+        print(f"[INFO] 접두어 복사 {k}쌍 ({v}, match_ratio={match_ratio})")
+        return
+
+    # 다중 버전 & match_ratio ≥1.0 -----------------------
+    candidates: list[tuple[str, str]] = []         # (base, version)
+    for v in versions:
+        img_dir = Path(base_output) / f"ODSR_{v}"
+        lbl_dir = Path(base_output) / f"ODSR_{v}_anno"
+        pref = f"{v}_"
+
+        for n in base_names:
+            if any((img_dir / f"{pref}{n}{ext}").exists() for ext in VALID_EXT) \
+               and (lbl_dir / f"{pref}{n}.txt").exists():
+                candidates.append((n, v))
+
+    if not candidates:
+        print("[WARN] 매칭 가능한 접두어 파일이 없습니다."); return
+
+    target = min(int(len(base_names) * match_ratio), len(candidates))
+    picked  = random.sample(candidates, target)
+
+    for n, v in picked:
+        img_dir = Path(base_output) / f"ODSR_{v}"
+        lbl_dir = Path(base_output) / f"ODSR_{v}_anno"
+        pref = f"{v}_"
+
+        for ext in VALID_EXT:
+            fp = img_dir / f"{pref}{n}{ext}"
+            if fp.exists():
+                _copy_one(fp, train_dir); break
+        _copy_one(lbl_dir / f"{pref}{n}.txt", train_dir)
+
+    actual = target / max(1, len(base_names))
+    sat = " (saturated)" if target < int(len(base_names) * match_ratio) else ""
+    print(f"[INFO] 접두어 복사 {target}쌍 / {len(base_names)} "
+          f"(actual match-ratio≈{actual:.2f}){sat}")

@@ -11,33 +11,28 @@
 # ------------------------------------------------------------------
 set -e
 
-VERSIONS="v9,v10,v11,v12,v13"
-RATIO=0.75
-SEED=66
+DEL_SEED=10        # 원본 삭제용 고정 시드
+MATCH_RATIO=2.5     # 접두어 매칭 비율
+MATCH_SEEDS=(6 7 8 9 10)   # 접두어 매칭 시드를 바꿀 값들
 
-# 공통 옵션
-COMMON_OPTS=(
-  --version "$VERSIONS"
-  --ratio   "$RATIO"
-  --seed    "$SEED"
-  --quality               # LPIPS 계산 + 통계
-  --save-results          # 학습 완료 후 결과 복사
-)
-
-MATCH_RATIOS=(1.0 2.0 3.0 4.0 5.0)
-
-for MR in "${MATCH_RATIOS[@]}"; do
-  echo "──────────────────────────────────────────"
-  echo "▶ match-ratio=$MR  |  LPIPS=TOP 50 %"
+for SM in "${MATCH_SEEDS[@]}"; do
+  echo "▶ seed_match=$SM  TOP50"
   python run_pipeline.py \
-    "${COMMON_OPTS[@]}" \
-    --match-ratio "$MR" \
-    --lpips-mode top --lpips-percent 50
+      --version v9,v10,v11,v12,v13 \
+      --ratio 0.75                \
+      --match-ratio "$MATCH_RATIO" \
+      --seed-del  "$DEL_SEED"     \
+      --seed-match "$SM"          \
+      --quality                   \
+      --lpips-mode top --lpips-percent 50
 
-  echo "------------------------------------------"
-  echo "▶ match-ratio=$MR  |  LPIPS=BOTTOM 50 %"
+  echo "▶ seed_match=$SM  BOTTOM50"
   python run_pipeline.py \
-    "${COMMON_OPTS[@]}" \
-    --match-ratio "$MR" \
-    --lpips-mode bottom --lpips-percent 50
+      --version v9,v10,v11,v12,v13 \
+      --ratio 0.75                \
+      --match-ratio "$MATCH_RATIO" \
+      --seed-del  "$DEL_SEED"     \
+      --seed-match "$SM"          \
+      --quality                   \
+      --lpips-mode bottom --lpips-percent 50
 done
