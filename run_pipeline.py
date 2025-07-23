@@ -6,6 +6,7 @@ YOLO 데이터 준비 · 학습 · 품질평가 · 결과 복사 파이프라인
 
 import argparse, os, sys, json, csv, shutil
 from pathlib import Path
+import getpass
 
 # ── 내부 유틸 ───────────────────────────────────────────────────────────
 from data_pipeline.utils_misc import (
@@ -29,8 +30,12 @@ from data_pipeline.quality_metrics import (
 
 # ── 품질 평가 전용 ------------------------------------------------------
 def run_quality_eval(dataset_root: str, versions: list[str], tag: str):
+    username = getpass.getuser()
+    log_dir = f"/home/{username}/jh_ws/yolo/logs"
+    os.makedirs(log_dir, exist_ok=True)
+
     train_dir = Path(dataset_root, "train")
-    log_path  = Path("/home/jhcha/jh_ws/yolo/logs", f"quality_{tag}.txt")
+    log_path  = Path(log_dir, f"quality_{tag}.txt")
     csv_path  = Path(dataset_root, "lpips_scores.csv")
 
     # 1) FID(버전별)
@@ -62,7 +67,7 @@ def run_quality_eval(dataset_root: str, versions: list[str], tag: str):
 # ── 메인 ----------------------------------------------------------------
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--version", required=True,
+    ap.add_argument("--version",
                     help="여러 버전은 콤마/공백 모두 허용 (예: v9,v10,v11)")
     ap.add_argument("--ratio",        type=float, default=0.5)
     ap.add_argument("--match-ratio",  type=float, default=1.0)
@@ -99,14 +104,20 @@ def main():
     # <<< ------------------------------------------------ >>
 
     args = ap.parse_args()
+    
+    username = getpass.getuser()
+    yolo_base_path = f"/home/{username}/jh_ws/yolo"
 
     # ── analyze-only ---------------------------------------------------
     if args.analyze_only:
-        root = "/home/jhcha/jh_ws/yolo"
+        root = yolo_base_path
         for d in os.listdir(Path(root, "runs/detect")):
             if d.startswith("train"):
                 copy_run_outputs(root, d, results_dir="results")
         return
+
+    if not args.version:
+        ap.error("the following arguments are required: --version")
 
     versions = [v.strip() for v in args.version.replace(",", " ").split()]
     delete_ratio = args.ratio
@@ -116,9 +127,9 @@ def main():
 
     tag = f"{'-'.join(versions)}_r{int(delete_ratio*100)}_m{int(match_ratio*100)}_sd{sd}_sm{sm}"
 
-    base_dir  = "/home/jhcha/jh_ws/yolo/datasets"
-    yolo_root = "/home/jhcha/jh_ws/yolo"
-    yolo_script = "/home/jhcha/jh_ws/yolo/yolo_train_ODSR_half.py"
+    base_dir  = f"{yolo_base_path}/datasets"
+    yolo_root = yolo_base_path
+    yolo_script = f"{yolo_base_path}/yolo_train_ODSR_half.py"
 
     train_root = Path(base_dir, f"ODSR-IHS_{tag}")
     train_dir  = train_root / "train"

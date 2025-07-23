@@ -2,6 +2,7 @@
 """YAML 생성 & YOLO 학습 스크립트 갱신 유틸"""
 import os
 import yaml
+from pathlib import Path
 
 
 # ─────────────────────────────────────────────
@@ -60,6 +61,39 @@ def create_yaml(
                 f.write(line)
 
     print(f"✅ YAML 생성 완료: {path}")
+
+def create_tirod_yaml(
+    version_tag: str,
+    *,
+    save_path: str,
+    base_dir: str,
+):
+    """
+    TiROD용 YAML   (datasets/TiROD_<tag>/… 상대경로로 기록)
+    """
+    # 최종 저장 위치:  yolo_root/<tag>.yaml
+    yaml_path = Path(save_path) / f"{version_tag}.yaml"
+
+    # 데이터셋 폴더 이름 = TiROD_<tag>
+    ds_folder = f"TiROD_{version_tag}"
+
+    data = {
+        "train": f"{ds_folder}/train",
+        "val":   f"{ds_folder}/valid",
+        "test":  f"{ds_folder}/test",
+        "nc": 13,
+        "names": [
+            "bag", "bottle", "cardboard box", "chair", "potted plant",
+            "traffic cone", "trashcan", "ball", "broom", "garden hose",
+            "bucket", "bycicle", "gardening tool",
+        ],
+    }
+
+    with open(yaml_path, "w") as f:
+        yaml.dump(data, f, sort_keys=False, default_flow_style=False)
+
+    print(f"✅ TiROD YAML 생성 완료: {yaml_path}")
+
 
 
 # ─────────────────────────────────────────────

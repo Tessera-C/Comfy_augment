@@ -22,18 +22,18 @@ set -e
 # done
 
 # --- 새로운 설정 ---
-VERSIONS="v9, v10, v11, v12, v13"
-RATIO=0.95
-SEEDS=(60)
+VERSIONS="v10, v11"
+RATIO=0
+SEEDS=(50)
 
 # MATCH_RATIOS=(0 0.25 0.5 0.75 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3.0 3.25 3.5 3.75 4.0 4.25 4.5 4.75 5.0)
 # MATCH_RATIOS=(4.0 4.25 4.5 4.75 5.0)
-MATCH_RATIOS=(4.0 3.75 3.5 3.25 3.0)
+MATCH_RATIOS=(0 0.25 0.5 0.75 1 1.25 1.5 1.75 2)
 
 
 for SEED in "${SEEDS[@]}"; do
     echo "▶ Running for SEED: $SEED"
-    BASE=(python run_pipeline.py
+    BASE=(python run_pipeline_tirod.py
           --version "$VERSIONS"
           --ratio   "$RATIO"
           --seed    "$SEED"
