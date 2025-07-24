@@ -52,8 +52,21 @@ def copy_and_prune_dataset_tirod(
     seed: int = 42,
     *,
     version_tag: str,
+    sampling: str = "random",          # "random"(기본) | "interval"
 ):
-    """datasets/TiROD → datasets/TiROD_<tag> 복사 후 `ratio` 만큼 train 이미지 무작위 삭제"""
+    """
+    datasets/TiROD  →  datasets/TiROD_<version_tag> 로 복사 후
+    train 하위 이미지를 `ratio` 만큼 삭제한다.
+
+    Parameters
+    ----------
+    sampling
+        "random"   : 기존 무작위 방식 (seed 사용)
+        "interval" : 파일명을 정렬해 **균등 간격**으로 삭제
+                     (ex. ratio=0.5 → 거의 1장 건너 1장 삭제)
+    """
+    import numpy as np
+
     src = os.path.join(base_dir, DATASET_NAME)
     dst = os.path.join(base_dir, f"{DATASET_NAME}_{version_tag}")
 
@@ -62,17 +75,40 @@ def copy_and_prune_dataset_tirod(
     shutil.copytree(src, dst)
 
     train_dir = os.path.join(dst, "train")
-    imgs = [f for f in os.listdir(train_dir) if Path(f).suffix.lower() in VALID_EXT]
-    random.seed(seed)
+    imgs = sorted(                              # 이름 기준 정렬
+        f for f in os.listdir(train_dir) if Path(f).suffix.lower() in VALID_EXT
+    )
+    if not imgs:
+        print(f"[WARN] '{train_dir}'에 이미지가 없습니다.")
+        return
+
     del_cnt = int(len(imgs) * ratio)
+    if del_cnt == 0:
+        print(f"[INFO] 삭제 비율이 낮아 0개 삭제되었습니다.")
+        return
 
-    for f in random.sample(imgs, del_cnt):
-        os.remove(os.path.join(train_dir, f))
-        txt = os.path.join(train_dir, Path(f).with_suffix(".txt").name)
-        if os.path.exists(txt):
-            os.remove(txt)
+    # ── 삭제 대상 선택 ─────────────────────────────────────────────
+    if sampling == "interval":
+        # 균등 간격 인덱스 추출
+        idx = np.linspace(0, len(imgs) - 1, del_cnt, endpoint=False, dtype=int)
+        targets = [imgs[i] for i in idx]
+    else:  # "random"
+        random.seed(seed)
+        targets = random.sample(imgs, del_cnt)
 
-    print(f"'{src}' → '{dst}' 복사 및 {del_cnt}개 파일 삭제 완료")
+    # ── 실제 삭제 ─────────────────────────────────────────────────
+    for f in targets:
+        img_path = os.path.join(train_dir, f)
+        lbl_path = os.path.join(train_dir, Path(f).with_suffix(".txt").name)
+        if os.path.exists(img_path):
+            os.remove(img_path)
+        if os.path.exists(lbl_path):
+            os.remove(lbl_path)
+
+    print(
+        f"'{src}' → '{dst}' 복사 및 {del_cnt}개 파일 삭제 완료 "
+        f"(sampling={sampling})"
+    )
 
 # ──────────────────────── 증강본 매칭 복사 ─────────────────────────────
 
@@ -283,7 +319,7 @@ def main():
 
     # ── 1) 데이터 복사 & 원본 삭제 --------------------------------------
     copy_and_prune_dataset_tirod(
-        base_dir, delete_ratio, seed=sd, version_tag=tag
+        base_dir, delete_ratio, seed=sd, version_tag=tag, sampling = "interval"
     )
 
     # ── 2) 접두어 매칭 복사 -------------------------------------------

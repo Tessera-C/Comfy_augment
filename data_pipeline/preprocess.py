@@ -8,6 +8,7 @@
 import os
 import random
 import shutil
+import numpy as np
 from typing import List
 from pathlib import Path
 
@@ -34,31 +35,43 @@ def add_prefix_to_filenames(version: str, source_folder: str, destination_folder
 
 # ─────────────────────────────────────────────
 def copy_and_prune_dataset(
-    base_dir: str, version: str, ratio: float, seed: int = 42, *, version_tag: str
+    base_dir: str, version: str, ratio: float, seed: int = 42, *, version_tag: str, dataset_name: str = "ODSR-IHS", sampling: str = "random"
 ):
     """
     datasets/ODSR-IHS  →  datasets/ODSR-IHS_{version_tag} 로 복사 후
     train 하위 이미지·라벨을 ratio만큼 무작위 삭제
     """
-    src = os.path.join(base_dir, "ODSR-IHS")
-    dst = os.path.join(base_dir, f"ODSR-IHS_{version_tag}")
+    src = os.path.join(base_dir, dataset_name)
+    dst = os.path.join(base_dir, f"{dataset_name}_{version_tag}")
 
     if os.path.exists(dst):
         shutil.rmtree(dst)
     shutil.copytree(src, dst)
 
     train_dir = os.path.join(dst, "train")
-    imgs = [f for f in os.listdir(train_dir) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
-    random.seed(seed)
+    imgs = sorted(
+        [f for f in os.listdir(train_dir) if f.lower().endswith(tuple(VALID_EXT))]
+    )
     del_cnt = int(len(imgs) * ratio)
 
-    for f in random.sample(imgs, del_cnt):
-        os.remove(os.path.join(train_dir, f))
-        txt = os.path.join(train_dir, os.path.splitext(f)[0] + ".txt")
-        if os.path.exists(txt):
-            os.remove(txt)
+    if sampling == "interval":
+        # 균등 분포 index 계산 → 삭제 대상
+        idx = np.linspace(0, len(imgs) - 1, del_cnt, dtype=int, endpoint=False)
+        targets = [imgs[i] for i in idx]
+    else:  # random
+        random.seed(seed)
+        targets = random.sample(imgs, del_cnt)
 
-    print(f"'{src}' → '{dst}' 복사 및 {del_cnt}개 파일 삭제 완료")
+    for f in targets:
+        os.remove(os.path.join(train_dir, f))
+        lbl = os.path.join(train_dir, os.path.splitext(f)[0] + ".txt")
+        if os.path.exists(lbl):
+            os.remove(lbl)
+
+    print(
+        f"'{src}' → '{dst}' 복사 및 {del_cnt}개 파일 삭제 완료 "
+        f"(sampling={sampling})"
+    )
 
 
 # ─────────────────────────────────────────────

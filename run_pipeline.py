@@ -152,7 +152,7 @@ def main():
 
     # ── 1) 데이터 복사 & 원본 삭제 --------------------------------------
     copy_and_prune_dataset(
-        base_dir, versions[0], delete_ratio,
+        base_dir, versions[0], delete_ratio, dataset_name="ODSR-IHS",
         seed=sd, version_tag=tag,
     )
 
