@@ -3,20 +3,20 @@
 """
 TiROD 데이터셋용 YOLO 전처리·학습·품질평가 파이프라인
 =====================================================
-ODSR 기반 `run_pipeline.py`를 그대로 계승하되 **데이터셋 이름만 TiROD로 교체**했습니다.
+ODSR 기반 run_pipeline.py를 그대로 계승하되 **데이터셋 이름만 TiROD로 교체**했습니다.
 사용 방법, CLI 옵션, 내부 로그 구조는 기존 스크립트와 100% 동일합니다.
 (단, YAML 생성 함수와 기본 YOLO 학습 스크립트 경로가 달라졌습니다.)
 
 주요 변경점
 ------------
-* 데이터셋 원본 폴더:  ``datasets/TiROD``
-* 증강본/어노테이션 위치: ``output/TiROD_<ver>``, ``output/TiROD_<ver>_anno``
-* 새 데이터셋 복사본:  ``datasets/TiROD_<tag>``
-* YAML 생성 함수   :  ``create_tirod_yaml`` (config_utils.py)
-* 기본 학습 스크립트:  ``yolo_train_TiROD.py`` (경로는 필요 시 수정)
+* 데이터셋 원본 폴더:  `datasets/TiROD
+* 증강본/어노테이션 위치: `output/TiROD_<ver>, output/TiROD_<ver>_anno
+* 새 데이터셋 복사본:  `datasets/TiROD_<tag>
+* YAML 생성 함수   :  `create_tirod_yaml (config_utils.py)
+* 기본 학습 스크립트:  `yolo_train_TiROD.py (경로는 필요 시 수정)
 
 나머지 로직·옵션은 ODSR 파이프라인과 동일합니다.  
-필요하면 `--help` 로 CLI 인자를 확인하세요.
+필요하면 --help 로 CLI 인자를 확인하세요.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ def copy_and_prune_dataset_tirod(
 ):
     """
     datasets/TiROD  →  datasets/TiROD_<version_tag> 로 복사 후
-    train 하위 이미지를 `ratio` 만큼 삭제한다.
+    train 하위 이미지를 ratio 만큼 삭제한다.
 
     Parameters
     ----------
@@ -113,8 +113,8 @@ def copy_and_prune_dataset_tirod(
 # ──────────────────────── 증강본 매칭 복사 ─────────────────────────────
 
 def _copy_one(src: Path, dst_dir: Path):
-    dst = dst_dir / src.name
-    shutil.copy(src, dst)
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy(src, dst_dir / src.name)
 
 
 def copy_augmented_files_tirod(
@@ -125,21 +125,21 @@ def copy_augmented_files_tirod(
     base_output: str = "output",
     seed: int = 42,
 ):
-    """ODSR 버전 함수와 동일 로직이지만 폴더 프리픽스를 TiROD 로 바꾼 구현"""
+    """TiROD 전용: **이미지 존재만** 기준으로 후보 선정, 라벨 없으면 빈 파일 생성"""
     if isinstance(versions, str):
         versions = [versions]
 
     random.seed(seed)
     train_dir_p = Path(train_dir)
 
-    # ── (0) 접두어 없는 원본 base 이름 수집 ────────────────────────────
+    # (0) 접두어 없는 원본 base 이름
     base_names = [
         f.stem
         for f in train_dir_p.iterdir()
         if f.suffix.lower() in VALID_EXT and not any(f.name.startswith(f"{v}_") for v in versions)
     ]
 
-    # 단일 버전 or match_ratio < 1.0 -----------------------------------
+    # ── 단일 버전 or match_ratio < 1.0 ───────────────────────────
     if len(versions) == 1 or match_ratio < 1.0:
         v = versions[0]
         img_src_dir = Path(base_output) / f"{DATASET_NAME}_{v}"
@@ -149,24 +149,30 @@ def copy_augmented_files_tirod(
         valid = [
             n for n in base_names
             if any((img_src_dir / f"{pref}{n}{ext}").exists() for ext in VALID_EXT)
-            and (lbl_src_dir / f"{pref}{n}.txt").exists()
-        ]
+        ]  # 라벨 여부 무시
         k = int(len(valid) * match_ratio)
         chosen = random.sample(valid, k)
 
         for n in chosen:
+            # 이미지
             for ext in VALID_EXT:
                 fp = img_src_dir / f"{pref}{n}{ext}"
                 if fp.exists():
                     _copy_one(fp, train_dir_p)
                     break
-            _copy_one(lbl_src_dir / f"{pref}{n}.txt", train_dir_p)
+            # 라벨 (없으면 빈 파일)
+            lbl_src = lbl_src_dir / f"{pref}{n}.txt"
+            lbl_dst = train_dir_p / f"{pref}{n}.txt"
+            if lbl_src.exists():
+                _copy_one(lbl_src, train_dir_p)
+            else:
+                lbl_dst.touch()
 
         print(f"[INFO] 접두어 복사 {k}쌍 ({v}, match_ratio={match_ratio})")
         return
 
-    # 다중 버전 & match_ratio ≥ 1.0 ------------------------------------
-    candidates: list[tuple[str, str]] = []      # (base_name, version)
+    # ── 다중 버전 & match_ratio ≥ 1.0 ────────────────────────────
+    candidates: list[tuple[str, str]] = []  # (base, version)
 
     for v in versions:
         img_dir = Path(base_output) / f"{DATASET_NAME}_{v}"
@@ -174,15 +180,11 @@ def copy_augmented_files_tirod(
         pref = f"{v}_"
 
         for n in base_names:
-            if (
-                any((img_dir / f"{pref}{n}{ext}").exists() for ext in VALID_EXT)
-                and (lbl_dir / f"{pref}{n}.txt").exists()
-            ):
-                candidates.append((n, v))
+            if any((img_dir / f"{pref}{n}{ext}").exists() for ext in VALID_EXT):
+                candidates.append((n, v))  # 라벨 없는 것도 포함
 
     if not candidates:
-        print("[WARN] 매칭 가능한 접두어 파일이 없습니다.")
-        return
+        print("[WARN] 매칭 가능한 접두어 파일이 없습니다."); return
 
     target = min(int(len(base_names) * match_ratio), len(candidates))
     picked = random.sample(candidates, target)
@@ -191,18 +193,23 @@ def copy_augmented_files_tirod(
         img_dir = Path(base_output) / f"{DATASET_NAME}_{v}"
         lbl_dir = Path(base_output) / f"{DATASET_NAME}_{v}_anno"
         pref = f"{v}_"
+        # 이미지
         for ext in VALID_EXT:
             fp = img_dir / f"{pref}{n}{ext}"
             if fp.exists():
                 _copy_one(fp, train_dir_p)
                 break
-        _copy_one(lbl_dir / f"{pref}{n}.txt", train_dir_p)
+        # 라벨: 있으면 복사, 없으면 0‑byte
+        lbl_src = lbl_dir / f"{pref}{n}.txt"
+        lbl_dst = train_dir_p / f"{pref}{n}.txt"
+        if lbl_src.exists():
+            _copy_one(lbl_src, train_dir_p)
+        else:
+            lbl_dst.touch()
 
     actual = target / max(1, len(base_names))
     sat = " (saturated)" if target < int(len(base_names) * match_ratio) else ""
-    print(
-        f"[INFO] 접두어 복사 {target}쌍 / {len(base_names)} (actual match-ratio≈{actual:.2f}){sat}"
-    )
+    print(f"[INFO] 접두어 복사 {target}쌍 / {len(base_names)} (actual match-ratio≈{actual:.2f}){sat}")
 
 # ─────────────────────────── 품질 평가 래퍼 ────────────────────────────
 
