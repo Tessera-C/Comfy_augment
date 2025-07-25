@@ -1,45 +1,98 @@
-# Comfy Augment
+# Comfy Augment: Data Augmentation Pipeline
 
-This project is designed to augment image datasets and train YOLO models. The core logic is encapsulated in the `run_pipeline.py` script, which automates the entire workflow from data preparation to model training and evaluation.
+## Overview
 
-## `run_pipeline.py`
+Comfy Augment is a powerful data augmentation pipeline designed to generate synthetic data using generative models, based on the ComfyUI framework. It provides a comprehensive workflow for data preprocessing, image generation, and quality assessment, enabling users to expand their datasets with high-quality synthetic images.
 
-This script is the main entry point for the project. It provides a command-line interface to run a complete pipeline for preparing YOLO (You Only Look Once) datasets, training models, and evaluating their quality.
+This project is particularly useful for tasks in computer vision where large amounts of varied data are required for training robust models.
 
-### Features
+## Features
 
-*   **Data Preparation:**
-    *   Copies and prunes datasets based on specified ratios.
-    *   Copies augmented files based on a matching ratio.
-    *   Adds prefixes to filenames for versioning.
-*   **Quality Evaluation:**
-    *   Computes FID (Fréchet Inception Distance) to measure the quality of generated images.
-    *   Computes LPIPS (Learned Perceptual Image Patch Similarity) to measure the similarity between images.
-    *   Filters the dataset based on LPIPS scores.
-*   **Training:**
-    *   Creates a YAML configuration file for YOLO training.
-    *   Runs the YOLO training script.
-    *   Saves the training results.
+- **Data Preprocessing:** A dedicated pipeline (`data_pipeline/preprocess.py`) to prepare input data for the generation models.
+- **Automated Generation:** Scripts (`run_pipeline.py`, `run_pipeline_tirod.py`) to automate the image generation process using configurable workflows.
+- **TiROD Integration:** Specialized pipeline for running the TiROD model for object detection tasks.
+- **Quality Assessment:** Tools to measure the quality of generated images (e.g., using LPIPS).
+- **Batch Processing:** Shell scripts (`run_batch.sh`, `lpips_run_batch.sh`) for processing large amounts of data efficiently.
 
-### Usage
+## Prerequisites
 
+- Python 3.x
+- Git
+
+## Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd Comfy_augment
+    ```
+
+2.  **Install dependencies:**
+    It is recommended to use a virtual environment.
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    ```
+    Install the required Python packages:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+## Usage
+
+The core of the project is executed through the `run_pipeline.py` and `run_pipeline_tirod.py` scripts.
+
+### Standard Pipeline
+
+The `run_pipeline.py` script orchestrates the main data augmentation workflow. You can run it with various arguments to control the pipeline's behavior.
+
+**Example:**
 ```bash
-python run_pipeline.py --version <versions> [options]
+python run_pipeline.py --config_path /path/to/your/config.json --input_dir /path/to/input/images --output_dir /path/to/output
+```
+*(Note: Please check the script's argument parser for a full list of available options.)*
+
+### TiROD Pipeline
+
+The `run_pipeline_tirod.py` script is specifically designed for workflows involving the TiROD model.
+
+**Example:**
+```bash
+python run_pipeline_tirod.py --config_path /path/to/your/tirod_config.json --input_dir /path/to/input/images --output_dir /path/to/output
 ```
 
-*   `--version`: Specify the versions of the dataset to use.
-*   `--ratio`: The ratio of the original dataset to delete.
-*   `--match-ratio`: The ratio of augmented files to match.
-*   `--seed`: The random seed for reproducibility.
-*   `--prefix`: Add a prefix to filenames.
-*   `--skip-train`: Skip the training step.
-*   `--save-results`: Save the training results.
-*   `--quality`: Run the quality evaluation.
-*   `--quality-only`: Only run the quality evaluation.
-*   `--analyze-only`: Only analyze the results.
-*   `--lpips-mode`: The LPIPS filter mode (`range`, `top`, `bottom`, `split`).
-*   `--lpips-min`, `--lpips-max`, `--lpips-percent`, `--lpips-split`, `--lpips-split-idx`: Parameters for the LPIPS filter.
+### Batch Processing
 
-## Other Scripts
+For generating data from multiple input directories or with different configurations, you can use the provided shell scripts.
 
-The other Python scripts in this project provide additional features and utilities that support the main pipeline.
+-   `run_batch.sh`: A script for running the pipeline on multiple data batches.
+-   `lpips_run_batch.sh`: A script for running LPIPS quality assessment on batches of generated images.
+
+Modify these scripts as needed to fit your specific workflow.
+
+## Project Structure
+
+```
+Comfy_augment/
+├───data_pipeline/      # Scripts for data preprocessing and quality metrics
+├───comfy/              # Core ComfyUI components
+├───comfy_extras/       # Additional custom nodes for ComfyUI
+├───models/             # Directory for storing ML models (checkpoints, LoRAs, etc.)
+├───input/              # Default directory for input data
+├───output/             # Default directory for generated images and results
+├───run_pipeline.py     # Main script for the standard augmentation pipeline
+├───run_pipeline_tirod.py # Main script for the TiROD pipeline
+├───requirements.txt    # List of Python dependencies
+└───README.md           # This file
+```
+
+## Key Dependencies
+
+This project relies on several key libraries, including:
+- `torch` & `torchvision`
+- `diffusers`
+- `transformers`
+- `Pillow`
+- `lpips`
+
+Please refer to `requirements.txt` for the full list.
