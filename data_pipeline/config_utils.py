@@ -6,14 +6,7 @@ from pathlib import Path
 
 
 # ─────────────────────────────────────────────
-def create_yaml(
-    version_tag: str,
-    delete_ratio: float,
-    match_ratio: float,
-    *,
-    save_path: str,
-    base_dir: str,          # ← 호출 측에서 넘겨주는 절대 경로
-):
+def create_yaml(version_tag: str, *, save_path: str, base_dir: str):
     """
     YOLO 데이터셋 YAML 파일 작성
     - dataset 경로: <base_dir>/ODSR-IHS_{version_tag}
@@ -62,12 +55,7 @@ def create_yaml(
 
     print(f"✅ YAML 생성 완료: {path}")
 
-def create_tirod_yaml(
-    version_tag: str,
-    *,
-    save_path: str,
-    base_dir: str,
-):
+def create_tirod_yaml(version_tag: str, *, save_path: str, base_dir: str):
     """
     TiROD용 YAML   (datasets/TiROD_<tag>/… 상대경로로 기록)
     """

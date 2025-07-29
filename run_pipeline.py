@@ -22,12 +22,9 @@ from data_pipeline.utils_misc import (
     get_auto_log_filename,
     rename_latest_yolo_run,
 )
-from data_pipeline.preprocess import (
-    add_prefix_to_filenames,
-    copy_and_prune_dataset,
-    copy_augmented_files,
-)
-from data_pipeline.config_utils import create_yaml, update_data_yaml_in_script
+from data_pipeline.dataset_config import CONFIGS
+from data_pipeline.preprocess import add_prefix_to_filenames
+from data_pipeline.config_utils import update_data_yaml_in_script
 from data_pipeline.runner import run_train_script
 from data_pipeline.quality_metrics import (
     compute_metric_per_image,  # LPIPS / DreamSim 공용
@@ -111,6 +108,8 @@ def main():
 
     # ── 품질 지표·필터 옵션 -------------------------------------------
     ap.add_argument("--metric", choices=["lpips", "dreamsim"], default="lpips", help="품질 지표 선택 (lpips | dreamsim)")
+    ap.add_argument("--dataset", choices=["odsr", "tirod"], default="odsr", help="데이터셋 키 (odsr | tirod)")
+    ap.add_argument("--sampling", choices=["random", "interval"], default="random", help="원본 삭제 샘플링 방식 (interval 은 tirod 전용)")
 
     ap.add_argument("--lpips-mode", choices=["range", "top", "bottom", "split"], default="range")
     ap.add_argument("--lpips-min", type=float)
@@ -120,6 +119,7 @@ def main():
     ap.add_argument("--lpips-split-idx", type=int, help="등분된 구간 중 사용할 인덱스(0-기반)")
 
     args = ap.parse_args()
+    cfg = CONFIGS[args.dataset]
 
     username = getpass.getuser()
     yolo_base_path = f"/home/{username}/jh_ws/yolo"
@@ -145,9 +145,9 @@ def main():
 
     base_dir = f"{yolo_base_path}/datasets"
     yolo_root = yolo_base_path
-    yolo_script = f"{yolo_base_path}/yolo_train_ODSR_half.py"
+    yolo_script = cfg.default_yolo_script
 
-    train_root = Path(base_dir, f"ODSR-IHS_{tag}")
+    train_root = Path(base_dir, f"{cfg.name}_{tag}")
     train_dir = train_root / "train"
 
     # 로그 파일 중계 ------------------------------------------------------
@@ -163,21 +163,35 @@ def main():
     # ── 사전 접두어 만들기 --------------------------------------------
     if args.prefix:
         for v in versions:
-            add_prefix_to_filenames(v, "output/ODSR_anno", f"output/ODSR_{v}_anno")
-            add_prefix_to_filenames(v, "output/ODSR", f"output/ODSR_{v}")
+            add_prefix_to_filenames(v, f"output/{cfg.output_prefix}_anno", f"output/{cfg.output_prefix}_{v}_anno")
+            add_prefix_to_filenames(v, f"output/{cfg.output_prefix}", f"output/{cfg.output_prefix}_{v}")
 
-    # ── 1) 데이터 복사 & 원본 삭제 ------------------------------------
-    copy_and_prune_dataset(
-        base_dir,
-        versions[0],
-        delete_ratio,
-        dataset_name="ODSR-IHS",
-        seed=sd,
-        version_tag=tag,
-    )
+    # ── 1) 데이터 복사 & 원본 삭제 ───────────────────────────────────
+    if args.sampling == "interval" and not cfg.supports_interval:
+        raise ValueError("interval 샘플링은 이 데이터셋에서 지원되지 않습니다.")
 
-    # ── 2) 접두어 매칭 복사 -------------------------------------------
-    copy_augmented_files(
+    if cfg.key == "odsr":
+        # ODSR 시그니처: (base_dir, version, delete_ratio, dataset_name, seed, version_tag)
+        cfg.copy_prune_fn(
+            base_dir,
+            versions[0],            # 첫 번째 버전
+            delete_ratio,
+            dataset_name=cfg.name,
+            seed=sd,
+            version_tag=tag,
+        )
+    else:  # tirod
+        # TiROD 시그니처: (base_dir, ratio, seed, *, version_tag, sampling)
+        cfg.copy_prune_fn(
+            base_dir,
+            delete_ratio,           # 삭제 비율
+            seed=sd,
+            version_tag=tag,
+            sampling=args.sampling,
+        )
+
+    # ── 2) 접두어 매칭 복사 ─────────────────────────────────────────
+    cfg.copy_aug_fn(
         str(train_dir),
         versions,
         match_ratio=match_ratio,
@@ -223,7 +237,7 @@ def main():
             suf = f"_split{args.lpips_split_idx}of{args.lpips_split}"
 
         tag += suf
-        final_root = Path(base_dir, f"ODSR-IHS_{tag}")
+        final_root = Path(base_dir, f"{cfg.name}_{tag}")
         if final_root.exists():
             shutil.rmtree(final_root)
         shutil.move(tmp_root, final_root)
@@ -255,8 +269,8 @@ def main():
             indent=2,
         )
 
-    # ── 5) YAML & 스크립트 ------------------------------------------
-    create_yaml(tag, delete_ratio, match_ratio, save_path=yolo_root, base_dir=base_dir)
+    # ── 5) YAML & 스크립트 -------------------------------------------
+    cfg.create_yaml_fn(tag, save_path=yolo_root, base_dir=base_dir)
     update_data_yaml_in_script(yolo_script, f"{tag}.yaml")
 
     # ── 6) 학습 ------------------------------------------------------
