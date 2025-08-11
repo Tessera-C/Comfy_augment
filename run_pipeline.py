@@ -91,6 +91,12 @@ def main():
     ap.add_argument("--version", help="여러 버전은 콤마/공백 모두 허용 (예: v9,v10,v11)")
     ap.add_argument("--ratio", type=float, default=0.5)
     ap.add_argument("--match-ratio", type=float, default=1.0)
+    ap.add_argument(
+        "--match-mode",
+        choices=["mix", "vs"],
+        default="mix",
+        help="mix: 기존 섞기 / verselect: 버전 단위 전체 선택",
+    )
 
     # ▶ 두 종류 시드 ------------------------------------------------------
     ap.add_argument("--seed-del", type=int)
@@ -191,12 +197,45 @@ def main():
         )
 
     # ── 2) 접두어 매칭 복사 ─────────────────────────────────────────
-    cfg.copy_aug_fn(
-        str(train_dir),
-        versions,
-        match_ratio=match_ratio,
-        seed=sm,
-    )
+    if args.match_mode == "mix":
+        # 기존 방식: 버전 전체를 하나로 합쳐서 무작위 샘플링
+        cfg.copy_aug_fn(
+            str(train_dir),
+            versions,
+            match_ratio=match_ratio,
+            seed=sm,
+        )
+    else:  # verselect
+        # 필수 검증 ----------------------------------------------------
+        if match_ratio < 1 or match_ratio != int(match_ratio):
+            raise ValueError("--match-mode verselect 에서는 --match-ratio 를 1 이상의 정수로 주세요.")
+        k = int(match_ratio)
+        if k > len(versions):
+            raise ValueError(f"선택 버전 개수(k={k}) > 입력된 버전 수({len(versions)})")
+
+        # 재현성 있는 무작위 선택
+        rng = np.random.default_rng(sm)
+        chosen = rng.choice(versions, size=k, replace=False).tolist()
+        print(f"[INFO] verselect: 선택된 버전 → {', '.join(chosen)}")
+
+        # 선택된 각 버전을 **전부** 복사 (match_ratio=1.0)
+        for v in chosen:
+            cfg.copy_aug_fn(
+                str(train_dir),
+                [v],
+                match_ratio=1.0,
+                seed=sm,
+            )
+
+        # TAG 정보 확장
+        # ── TAG 확장 & 데이터 폴더도 함께 이름 변경 ─────────────
+        old_root = train_root                     # 현재 폴더
+        tag     += f"_vs{k}"
+        new_root = Path(base_dir, f"{cfg.name}_{tag}")
+        if old_root.exists():
+            old_root.rename(new_root)             # 폴더 개명
+        train_root = new_root                     # 이후 경로 교체
+        train_dir  = new_root / "train"
 
     # ── 3) 품질 평가 (필요 시) ---------------------------------------
     need_quality = (

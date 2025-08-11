@@ -28,4 +28,4 @@ logs/
 models/
 output/
 input/
-custom_nodes/
+custom_nodes/assign_map.csv
