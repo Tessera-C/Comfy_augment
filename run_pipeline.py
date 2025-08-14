@@ -198,34 +198,43 @@ def main():
 
     # ── 2) 접두어 매칭 복사 ─────────────────────────────────────────
     if args.match_mode == "mix":
-        # 기존 방식: 버전 전체를 하나로 합쳐서 무작위 샘플링
-        cfg.copy_aug_fn(
-            str(train_dir),
-            versions,
-            match_ratio=match_ratio,
-            seed=sm,
-        )
-    else:  # verselect
+        if match_ratio <= 0:
+            print("[INFO] mix 모드: match_ratio=0 → 접두어 복사 생략 (원본만 학습)")
+        else:
+            # 기존 방식: 버전 전체를 하나로 합쳐서 무작위 샘플링
+            cfg.copy_aug_fn(
+                str(train_dir),
+                versions,
+                match_ratio=match_ratio,
+                seed=sm,
+            )
+    else:  # vs (verselect)
         # 필수 검증 ----------------------------------------------------
-        if match_ratio < 1 or match_ratio != int(match_ratio):
-            raise ValueError("--match-mode verselect 에서는 --match-ratio 를 1 이상의 정수로 주세요.")
+        # → 0 이상의 정수 허용 (0이면 접두어 복사 생략 = 원본만 학습)
+        if match_ratio < 0 or match_ratio != int(match_ratio):
+            raise ValueError("--match-mode vs 에서는 --match-ratio 를 0 이상의 정수로 주세요.")
         k = int(match_ratio)
+        
         if k > len(versions):
             raise ValueError(f"선택 버전 개수(k={k}) > 입력된 버전 수({len(versions)})")
 
-        # 재현성 있는 무작위 선택
-        rng = np.random.default_rng(sm)
-        chosen = rng.choice(versions, size=k, replace=False).tolist()
-        print(f"[INFO] verselect: 선택된 버전 → {', '.join(chosen)}")
+        if k == 0:
+            print("[INFO] vs 모드: match_ratio=0 → 접두어 복사 생략 (원본만 학습)")
+            chosen = []
+        else:
+            # 재현성 있는 무작위 선택
+            rng = np.random.default_rng(sm)
+            chosen = rng.choice(versions, size=k, replace=False).tolist()
+            print(f"[INFO] vs 모드: 선택된 버전 → {', '.join(chosen)}")
 
-        # 선택된 각 버전을 **전부** 복사 (match_ratio=1.0)
-        for v in chosen:
-            cfg.copy_aug_fn(
-                str(train_dir),
-                [v],
-                match_ratio=1.0,
-                seed=sm,
-            )
+            # 선택된 각 버전을 **전부** 복사 (match_ratio=1.0)
+            for v in chosen:
+                cfg.copy_aug_fn(
+                    str(train_dir),
+                    [v],
+                    match_ratio=1.0,
+                    seed=sm,
+                )
 
         # TAG 정보 확장
         # ── TAG 확장 & 데이터 폴더도 함께 이름 변경 ─────────────
