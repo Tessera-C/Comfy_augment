@@ -15,10 +15,11 @@ set -e
 # ── 사용자 설정 ─────────────────────────────────────────────────────
 # VERSIONS=(v10 v10 v11 v12 v13)      # 한 실험에 투입할 버전 목록
 VERSIONS=(v100 v101 v102 v103 v104 v105 v106 v107 v108 v109 v110 v111)
-MATCH_RATIOS=(0 1 2 3 4 5 6 7 8)               # mix → 실수 허용, vs → 정수(k개 버전)
+MATCH_RATIOS=(0 1 2 3 4 5 6 7 8)
+MATCH_RATIOS=(0)               # mix → 실수 허용, vs → 정수(k개 버전)
 MATCH_MODE="vs"                    # mix | vs
-DEL_SEEDS=(111 222 333)                     # 여러 개면 반복
-MATCH_SEEDS=(41)                # 여러 개면 반복
+DEL_SEEDS=(24 25 26)                     # 여러 개면 반복
+MATCH_SEEDS=(65)                # 여러 개면 반복
 DATASETS=(odsr)              # 복수 선택 가능
 METRICS=(dreamsim)                 # dreamsim, lpips 등
 SAMPLING="random"                  # tirod 전용 interval 원하면 "interval"
