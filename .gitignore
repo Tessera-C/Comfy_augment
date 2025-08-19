@@ -29,3 +29,4 @@ models/
 output/
 input/
 custom_nodes/assign_map.csv
+assign_map.csv
